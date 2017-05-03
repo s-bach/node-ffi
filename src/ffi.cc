@@ -1,5 +1,8 @@
 #include <node.h>
 #include <node_buffer.h>
+
+#define FFI_EXTRA_CIF_FIELDS bool getLastError;
+
 #include "ffi.h"
 #include "fficonfig.h"
 
@@ -167,6 +170,7 @@ NAN_MODULE_INIT(FFI::InitializeBindings) {
  * args[2] - the "return type" pointer
  * args[3] - the "arguments types array" pointer
  * args[4] - the ABI to use
+ * args[5] - call GetLastError on windows or not
  *
  * returns the ffi_status result from ffi_prep_cif()
  */
@@ -176,9 +180,10 @@ NAN_METHOD(FFI::FFIPrepCif) {
   char *rtype, *atypes, *cif;
   ffi_status status;
   ffi_abi abi;
+  bool getLastError;
 
-  if (info.Length() != 5) {
-    return THROW_ERROR_EXCEPTION("ffi_prep_cif() requires 5 arguments!");
+  if (info.Length() != 6) {
+    return THROW_ERROR_EXCEPTION("ffi_prep_cif() requires 6 arguments!");
   }
 
   Handle<Value> cif_buf = info[0];
@@ -191,6 +196,7 @@ NAN_METHOD(FFI::FFIPrepCif) {
   rtype = Buffer::Data(info[2]->ToObject());
   atypes = Buffer::Data(info[3]->ToObject());
   abi = (ffi_abi)info[4]->Uint32Value();
+  getLastError = (bool)info[5]->BooleanValue();
 
   status = ffi_prep_cif(
       (ffi_cif *)cif,
@@ -198,6 +204,7 @@ NAN_METHOD(FFI::FFIPrepCif) {
       nargs,
       (ffi_type *)rtype,
       (ffi_type **)atypes);
+  ((ffi_cif *)cif)->getLastError = getLastError;
 
   info.GetReturnValue().Set(Nan::New<Integer>(status));
 }
@@ -212,6 +219,7 @@ NAN_METHOD(FFI::FFIPrepCif) {
  * args[3] - the "return type" pointer
  * args[4] - the "arguments types array" pointer
  * args[5] - the ABI to use
+ * args[6] - call GetLastError on windows or not
  *
  * returns the ffi_status result from ffi_prep_cif_var()
  */
@@ -220,9 +228,10 @@ NAN_METHOD(FFI::FFIPrepCifVar) {
   char *rtype, *atypes, *cif;
   ffi_status status;
   ffi_abi abi;
+  bool getLastError;
 
-  if (info.Length() != 6) {
-    return THROW_ERROR_EXCEPTION("ffi_prep_cif() requires 5 arguments!");
+  if (info.Length() != 7) {
+    return THROW_ERROR_EXCEPTION("ffi_prep_cif() requires 6 arguments!");
   }
 
   Handle<Value> cif_buf = info[0];
@@ -236,6 +245,7 @@ NAN_METHOD(FFI::FFIPrepCifVar) {
   rtype = Buffer::Data(info[3]->ToObject());
   atypes = Buffer::Data(info[4]->ToObject());
   abi = (ffi_abi)info[5]->Uint32Value();
+  getLastError = (bool)info[6]->BooleanValue();
 
   status = ffi_prep_cif_var(
       (ffi_cif *)cif,
@@ -244,6 +254,7 @@ NAN_METHOD(FFI::FFIPrepCifVar) {
       targs,
       (ffi_type *)rtype,
       (ffi_type **)atypes);
+  ((ffi_cif *)cif)->getLastError = getLastError;
 
   info.GetReturnValue().Set(Nan::New<Integer>(status));
 }
@@ -281,7 +292,11 @@ NAN_METHOD(FFI::FFICall) {
       return THROW_ERROR_EXCEPTION(WrapPointer((char *)ex));
     }
 #endif
-
+  if (((ffi_cif *)cif)->getLastError) {
+    uint32_t e = GetLastError();
+	if (e != 0)
+      return Nan::ThrowError(Nan::ErrnoException((int)e, "ffi_call"));
+  }
   info.GetReturnValue().SetUndefined();
 }
 
